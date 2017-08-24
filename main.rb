@@ -99,45 +99,8 @@ module ACG
       
       fint = FeatureIntersector.new(features)
       fint.initial_calculations()
+      fint.balls_to_the_walls()
       
-      #BALLS TO THE WALLS
-      
-      #find wall-featureplane intersections that are close enough
-      puts "\n==== BALLS TO THE WALLS ===="
-      ConsoleDeluxe::print_row(["Fid","BFP-edge","Min dist","Status"])
-      xlines_walls = Hash.new
-      xpoints_walls = Array.new(features.length){Set.new}
-      for i in 0..iterations
-        plane = features[i].plane
-        edge_idx = 0
-        for edge in bfp_face.edges
-          line_1 = [edge.start.position,Geom::Vector3d.new(0,0,1)]
-          line_2 = [edge.end.position,Geom::Vector3d.new(0,0,1)]
-          #model.entities.add_cline(line_1[0],line_1[1])
-          x1 = Geom.intersect_line_plane(line_1,plane)
-          x2 = Geom.intersect_line_plane(line_2,plane)
-
-          new_edge = wall_edge_group.entities.add_edges(x1,x2)[0]
-          distances =  Array.new
-          for vertex in features[i].vertices
-            distances.push(CustomGeomOperations::point_to_edge_distance(vertex.position,new_edge))
-          end
-          min_dist = distances.min
-          if min_dist > 2.m
-            status = "FIMPAD"
-            new_edge.erase!
-          else
-            status = "ok"
-            xpoints_walls[i].add(x1)
-            xpoints_walls[i].add(x2)
-          end
-          ConsoleDeluxe::print_row([i,edge_idx,min_dist,status])
-          
-          edge_idx = edge_idx+1
-        end
-      end
-    
-
       # VASK O FIMP
       puts "\n==== Determine which intersection lines to vask ===="
       ConsoleDeluxe::print_row(["ID","Closest Vertex","Vertex Proximity","Status"])
