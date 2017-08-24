@@ -95,10 +95,128 @@ module ACG
 
       ModelAnnotator::print_feature_vertex_ids(features[0],feature_vertex_ids_group)
 
-      #Create Intersection lines and distances to vertices + transformat
-      
-      fint = FeatureIntersector.new(features)
-      fint.initial_calculations()
+      #Create Intersection lines and distances to vertices
+      xlines= Hash.new
+      xlines_dists = Hash.new
+      xlines_projs = Hash.new
+      xlines_ts = Hash.new
+      xlines_proximity_between_ft_vertices = Hash.new
+      xlines_transformed_points = Hash.new
+      xlines_transformations = Hash.new
+      iterations = features.length-1
+      for i in 0..iterations
+        for j in 0..iterations
+          unless i == j || xlines.has_key?([i,j]) then #no neeed for i-j if j-i exists
+           
+            puts "Creating xline of feaature #{i} and #{j }"
+            line = Geom.intersect_plane_plane(features[i].plane, features[j].plane)
+            xlines[[i,j]] = line
+            xlines[[j,i]] = line
+
+            #Prep transformation
+            line_xaxis = line[1].clone.normalize 
+            line_origo = line[0].clone
+
+            #puts "line_origo: #{line_origo}"
+            #puts "line_xaxis: #{line_xaxis}"
+
+            #Transformation
+            #line_xaxis.z = 0
+            #line_origo.z = 0
+            zaxis = Geom::Vector3d.new(0,0,1)
+            yaxis = line_xaxis*zaxis
+            
+
+            trans = Geom::Transformation.new(line_origo, line_xaxis, yaxis)
+            
+            #ConsoleDeluxe::print_matrix(trans.to_a,4,4)
+            #trans = Geom::Transformation.new(line_xaxis, yaxis,zaxis,line_origo)
+            trans.invert!
+            
+
+            #Transformation (new)
+            translation_vector = line_origo.vector_to(ORIGIN)
+            identity = Geom::Transformation.new()
+            angle = CustomGeomOperations::angle_between_vectors_xy(X_AXIS,line_xaxis)
+            
+            rotation = Geom::Transformation.rotation(ORIGIN, Z_AXIS, -angle)
+            translation = Geom::Transformation.translation(translation_vector)
+
+            projection = Geom::Transformation.new([1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 0, 0.0, 0.0, 0.0, 0.0, 1.0])
+            transformation = Geom::Transformation.new()
+            angle_degrees = angle.radians
+            puts "angle between x-axis and xline: #{angle_degrees}"
+            trans = projection*rotation*translation
+
+
+            #puts "inverse #{trans.to_a}"
+            xlines_transformations[[i,j]] = trans
+            xlines_transformations[[j,i]] = trans
+
+            #First feature closest vertex to xline
+            distances_i = Array.new
+            proj_points_i = Array.new
+            ts_i= Array.new
+            transformed_points_i = Array.new
+
+            features[i].vertices.each do |vertex|
+              distances_i.push(vertex.position.distance_to_line(line))
+              proj_points_i.push(vertex.position.project_to_line(line))
+              ts_i.push(CustomGeomOperations::where_on_line(vertex.position,line))
+              p = vertex.position.clone.transform(trans)
+              p.z = 1.m
+              transformed_points_i.push(p)
+            end
+
+
+
+            xlines_dists[[i,j]] = distances_i
+            xlines_projs[[i,j]] = proj_points_i
+            xlines_ts[[i,j]] = ts_i
+            xlines_transformed_points[[i,j]] = transformed_points_i
+            #xlines_transformed_points[[i,j]] = features[i].transform(trans)
+            #Second Feature closest vertex to xline
+            distances_j = Array.new
+            proj_points_j = Array.new
+            ts_j= Array.new
+            transformed_points_j = Array.new
+
+            features[j].vertices.each do |vertex|
+              distances_j.push(vertex.position.distance_to_line(line))     
+              proj_points_j.push(vertex.position.project_to_line(line))
+              ts_j.push(CustomGeomOperations::where_on_line(vertex.position,line))
+              p = vertex.position.transform(trans)
+              p.z = 1.m
+              transformed_points_j.push(p)
+            end
+
+            xlines_dists[[j,i]] = distances_j
+            xlines_projs[[j,i]] = proj_points_j
+            xlines_ts[[j,i]] = ts_j
+            xlines_transformed_points[[j,i]] = transformed_points_j
+
+            #Vertex proximity
+            #TODO: make this with edge to vertex instead
+            temp_hash = Hash.new
+            edge_dists = Array.new
+            features[i].vertices.each_with_index do |first_vertex,k|
+              features[j].vertices.each_with_index do |second_vertex,l|
+                unless temp_hash.has_key?([[l,k]]) then
+                  temp_hash[[k,l]] = true
+                  temp_hash[[l,k]] = true
+                  edge_dists.push(first_vertex.position.distance(second_vertex))
+                  
+                end
+              end
+            end
+            min_edge_dist = edge_dists.min
+            xlines_proximity_between_ft_vertices[[j,i]] = min_edge_dist
+            xlines_proximity_between_ft_vertices[[i,j]] = min_edge_dist
+
+          end      
+        end
+      end
+
       
       #BALLS TO THE WALLS
       
