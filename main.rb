@@ -10,7 +10,7 @@ require_relative 'src/importer.rb'
 require_relative 'src/model_annotator.rb'
 require_relative 'src/console_deluxe.rb'
 require_relative 'src/helper_classes.rb'
-
+require_relative 'src/figure2d.rb'
 class FalseClass; def to_i; 0 end end
 class TrueClass; def to_i; 1 end end
 
@@ -100,93 +100,19 @@ module ACG
       fint = FeatureIntersector.new(features)
       fint.initial_calculations()
       fint.balls_to_the_walls()
-      
-      # VASK O FIMP
-      puts "\n==== Determine which intersection lines to vask ===="
-      ConsoleDeluxe::print_row(["ID","Closest Vertex","Vertex Proximity","Status"])
-      for i in 0..iterations
-        f1 = features[i] 
-        for j in 0..iterations
-          unless i == j  then
-            id = i.to_s + "-" + j.to_s
-            closest_vertex_to_line_dist,min_id_i = xlines_dists[[i,j]].each_with_index.min
-            vertex_proximity = xlines_proximity_between_ft_vertices[[i,j]]           
+      fint.remove_bogus_xlines()
+      fint.calcualte_relevant_xpoints()
 
-            if closest_vertex_to_line_dist > LINE_CONSCENT_THRESH || vertex_proximity > VERTEX_PROXIMITY_THRESH
-              status = "FIMPAD!"
-              xlines[[i,j]] = nil
-            else
-              status = "ok"
-            end
-            ConsoleDeluxe::print_row([id,closest_vertex_to_line_dist.to_mm.floor,vertex_proximity,status])
-            
-          end      
-        end
-      end
-
-      #Intersection points
-      xpoints = Array.new(features.length){Array.new}
-      xpoints_deluxe = Hash.new
-      #xpoint_id = 0
-      puts "\n==== Find intersection points ===="
-      ConsoleDeluxe::print_row(["Fid","Features X","Keyz","Feature dists (m)","Sum","Status"],[5,15,20,30,20,30])
-      for i in 0..iterations
-        
-        feature_id = i
-        feature_face = features[feature_id]
-        hash_keys_to_get = (0..iterations).reject{|x| x == feature_id}.to_a.product([feature_id]) #get whole row except self
-        hash_keys_to_get = hash_keys_to_get.reject{|pair| xlines[pair].nil?} # remove pair with non-existing line
-        
-        #TODO: avid calculating same xpoint many times
-        hash_keys_to_get.combination(2).each do |keyz|
-          point = Geom.intersect_line_line(xlines[keyz[0]], xlines[keyz[1]])
-
-          point_identity = keyz.flatten.uniq
-          xpoint_dists_to_creators = Array.new
-          for fid in point_identity do
-            dists = Array.new
-            features[fid].edges.each do |edge|
-              dists.push(CustomGeomOperations::point_to_edge_distance(point, edge))
-            end
-            xpoint_dists_to_creators.push(dists)
-          end
-
-          xpoint_dists_to_creators_min = xpoint_dists_to_creators.collect{|x|  x.min}
-          xpoint_dists_to_creators_min_sum = xpoint_dists_to_creators_min.inject(0){|sum,x| sum + x }
-          
-          #vask = xpoint_dists_to_creators_min.any?{|min_dist| min_dist>XPOINT_DISTANCES_THRESH} 
-          vask = xpoint_dists_to_creators_min_sum > 16.m #TODO: option for sum vs individual
-
-          if vask then 
-            status = "FIMPAD!"
-          else
-            status = "ok"  
-          end
-          
-          
-          xpoint_dists_to_creators_min_print = xpoint_dists_to_creators_min.collect{|x|  x.to_m.round(2)}
-          
-
-          ConsoleDeluxe::print_row([feature_id,point_identity,keyz,xpoint_dists_to_creators_min_print,xpoint_dists_to_creators_min_sum.to_m.round(2),status],[5,15,20,30,20,30])
-          unless vask then
-            xpoints_deluxe[point_identity.to_set] = point #TODO: make hash that can lookup point from 2 features rather than 3
-            xpoints[i].push(point)
-          end
-          
-          #xpoints_group.entities.add_cpoint(point)
-          #xpoint_id = xpoint_id+1
-        end
-      end
-      
       #Plot
 
-      
       puts "\n======== Feature xline attraction ========"
       #ConsoleDeluxe::print_row(["Fid","Feature Id Pair","Xpoint Triples"],[5,20,50])
       x_offset = 0
       book_keeping = Hash.new
-      for i in 0..6
+      howmany = 6
+      iterations = 3
 
+      for i in 0..howmany
         
         feature_id = i
         feature_face = features[feature_id]
@@ -209,15 +135,24 @@ module ACG
           book_keeping[[f1,f2]] = true
           book_keeping[[f2,f1]] = true
 
+          
           plot_group = model.active_entities.add_group
+
+          fig = Figure2d.new(plot_group) #NEW
+          
+
           face_points_1 = xlines_transformed_points[[f1,f2]]
           face_points_2 = xlines_transformed_points[[f2,f1]]
+
+          fig.add_polygon(face_points_1,face_points_2) #NEW
+
           puts "f1: #{f1}"
           puts "f2: #{f2}"
           #PLOT
           #Draw faces
           face1 = plot_group.entities.add_face(face_points_1)
           face2 = plot_group.entities.add_face(face_points_2)
+
           #calculate plot area
           xmax = plot_group.bounds.max[0]
           xmin = plot_group.bounds.min[0]
@@ -250,7 +185,7 @@ module ACG
           #Get xpoints for feature pair
           key_set = [f1,f2].to_set
           shared_xpoints = xpoints_deluxe.select {|k,v| key_set.subset?(k)} #select x-points belonging o f1 and f2
-          vpf_x_points = Array.new()
+          vpf_x_points = Array.new() 
           shared_xpoints.each_pair do |key,point|
             new_x_point = point.clone
             new_x_point.z = 0
