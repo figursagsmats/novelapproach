@@ -11,6 +11,11 @@ class Figure2d
     def add_polygon()
         
     end
+    def actually_draw_shit()
+        calculate_plot_area()
+
+    end
+
 
     def calculate_plot_area(plot_group)
         #calculate plot area
@@ -34,9 +39,13 @@ class Figure2d
         
         bb_points = [[xmin,ymin,0],[xmax,ymin,0],[xmax,ymax,0],[xmin,ymax,0],[xmin,ymin,0]]
         #plot_group.entities.add_edges(bb_points)
-        move_down = Geom::Transformation.new([0, 0, -1.m]) 
+
+
+        move_down = Geom::Transformation.new([0, 0, -1.m])
         plot_group.entities.transform_entities(move_down,face1) #to avoid z=0 quirk
         plot_group.entities.transform_entities(move_down,face2)
+
+        
         draw_axes(xaxis_end,ymax)
 
 

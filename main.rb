@@ -15,6 +15,7 @@ class FalseClass; def to_i; 0 end end
 class TrueClass; def to_i; 1 end end
 
 
+
 module ACG
   module ImportStrykIron
     def self.add_group_and_layer(name,visible)
@@ -97,9 +98,9 @@ module ACG
 
       #Create Intersection lines and distances to vertices + transformat
       
-      fint = FeatureIntersector.new(features)
+      fint = FeatureIntersector.new(features,bfp_face)
       fint.initial_calculations()
-      fint.balls_to_the_walls()
+      fint.balls_to_the_walls(wall_edge_group)
       fint.remove_bogus_xlines()
       fint.calcualte_relevant_xpoints()
 
@@ -117,8 +118,7 @@ module ACG
         feature_id = i
         feature_face = features[feature_id]
         
-        hash_keys_to_get = (0..iterations).reject{|x| x == feature_id}.to_a.product([feature_id]) #get whole row except self
-        hash_keys_to_get = hash_keys_to_get.reject{|pair| xlines[pair].nil?} # remove pair with non-existing line
+        hash_keys_to_get = fint.get_feature_xline_keys(feature_id)
         #TODO: avid calculating same xpoint many times
         count = 0
         puts "========================================="
@@ -138,13 +138,13 @@ module ACG
           
           plot_group = model.active_entities.add_group
 
-          fig = Figure2d.new(plot_group) #NEW
+          #fig = Figure2d.new(plot_group) #NEW
           
 
-          face_points_1 = xlines_transformed_points[[f1,f2]]
-          face_points_2 = xlines_transformed_points[[f2,f1]]
+          face_points_1, face_points_2 = fint.get_transformed_feature(f1,f2)
+          
 
-          fig.add_polygon(face_points_1,face_points_2) #NEW
+          #fig.add_polygon(face_points_1,face_points_2) #NEW
 
           puts "f1: #{f1}"
           puts "f2: #{f2}"
@@ -184,7 +184,8 @@ module ACG
 
           #Get xpoints for feature pair
           key_set = [f1,f2].to_set
-          shared_xpoints = xpoints_deluxe.select {|k,v| key_set.subset?(k)} #select x-points belonging o f1 and f2
+          shared_xpoints = fint.xpoints_deluxe.select {|k,v| key_set.subset?(k)} #select x-points belonging o f1 and f2
+         
           vpf_x_points = Array.new() 
           shared_xpoints.each_pair do |key,point|
             new_x_point = point.clone
@@ -250,6 +251,8 @@ module ACG
           vpf.sort!{|point_and_id_1,point_and_id_2| point_and_id_1[1].x <=> point_and_id_2[1].x }
           vpf.collect!{|a| {"vertex"=>a[0],"point"=>a[1],"feature"=>a[2]}} #Just for notation purposes...
           print_temp = shared_xpoints.keys.collect{|x| x.to_a.join.to_i}
+
+
 
           puts "\n=== Attraction table for #{feature_id_pair[0]} & #{feature_id_pair[1]} === #{print_temp}"
           col_spacings = [5,8,10,15,15,20,15,20,20,20]

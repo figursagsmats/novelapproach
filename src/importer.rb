@@ -84,7 +84,6 @@ module Importer
         f.each_line do |line|
 
           if line.length < 2 then
-            puts ">>>> ADDING FACE <<<<"
             vertices = vertices.map{ |arr| arr.map{ |v| v.to_f.m } } #complicated way of converting to float
             face = group.entities.add_face(vertices)
             features.push(face)

@@ -4,28 +4,38 @@ require_relative '../src/model_annotator.rb'
 require_relative '../src/console_deluxe.rb'
 require_relative '../src/helper_classes.rb'
 class FeatureIntersector
-    #use hashes instead of 2d arrays
-    @xlines= Hash.new             #intersection lines
-    @xlines_dists = Hash.new      #distance from feature vertices to xline.
-    @xlines_projs = Hash.new      #vertices projected on xline
-    @xlines_ts = Hash.new         #where on the xline
-    @xlines_proximity_between_ft_vertices = Hash.new #The distances between the two most adjecent vertices in two features. This measure is obtained by comparing all vertex-to-vertex distances between the features.
-    @xlines_transformed_points = Hash.new #vertices transformed so that x-line is xaxis t = 0 is origo and projected to xy-plane
-    @xlines_transformations = Hash.new  #
+
     
     @n_features
 
-    @LINE_CONSCENT_THRESH ||= 4.m
-    @VERTEX_PROXIMITY_THRESH ||= 2.m
-    @WALL_BIAS_FACTOR ||= 0.8
-    @XPOINT_DISTANCES_THRESH ||= 2.m
-    @ATTRACTION_THRESH ||= 2.m
 
-    def initialize(features)
+
+    def initialize(features,bfp_face)
         @n_features = features.length
+        @features = features
+        @bfp_face = bfp_face
+
+        #use hashes instead of 2d arrays
+        @xlines= Hash.new             #intersection lines
+        @xlines_dists = Hash.new      #distance from feature vertices to xline.
+        @xlines_projs = Hash.new      #vertices projected on xline
+        @xlines_ts = Hash.new         #where on the xline
+        @xlines_proximity_between_ft_vertices = Hash.new #The distances between the two most adjecent vertices in two features. This measure is obtained by comparing all vertex-to-vertex distances between the features.
+        @xlines_transformed_points = Hash.new #vertices transformed so that x-line is xaxis t = 0 is origo and projected to xy-plane
+        @xlines_transformations = Hash.new  #
+
+        @xpoints = Array.new(@features.length){Array.new} #One array of xpoints per feature
+        @xpoints_deluxe = Hash.new #Hash that takes a set of ids as key and and xpoint as value
+
+
+        @LINE_CONSCENT_THRESH ||= 4.m
+        @VERTEX_PROXIMITY_THRESH ||= 2.m
+        @WALL_BIAS_FACTOR ||= 0.8
+        @XPOINT_DISTANCES_THRESH ||= 2.m
+        @ATTRACTION_THRESH ||= 2.m
     end
 
-    
+    attr_reader :xpoints_deluxe
     
     def initial_calculations()
 
@@ -36,13 +46,15 @@ class FeatureIntersector
         #   - xlines_ts
         #   - xlines_proximity_between_ft_vertices
         #   - xlines_transformations
-
+        puts "\n==== INITIAL CALCULATIONS ===="
+        spacings = [10,30,30]
+        ConsoleDeluxe::print_row(["Fids","Xline angle","Inner calc steps"],spacings)
+        
+        inner_calc_steps = 0;
         for i in 0...@n_features
             for j in 0...@n_features
                 unless i == j || @xlines.has_key?([i,j]) then #no neeed for i-j if j-i exists
-                
-                puts "Creating xline of feaature #{i} and #{j}"
-                line = Geom.intersect_plane_plane(@features[i].plane, @features[j].plane)
+                line = Geom.intersect_plane_plane(@features[i]. plane, @features[j].plane)
                 @xlines[[i,j]] = line
                 @xlines[[j,i]] = line
 
@@ -50,23 +62,14 @@ class FeatureIntersector
                 line_xaxis = line[1].clone.normalize 
                 line_origo = line[0].clone
 
-                #puts "line_origo: #{line_origo}"
-                #puts "line_xaxis: #{line_xaxis}"
-
-                #Transformation
-                #line_xaxis.z = 0
-                #line_origo.z = 0
                 zaxis = Geom::Vector3d.new(0,0,1)
                 yaxis = line_xaxis*zaxis
                 
 
                 trans = Geom::Transformation.new(line_origo, line_xaxis, yaxis)
                 
-                #ConsoleDeluxe::print_matrix(trans.to_a,4,4)
-                #trans = Geom::Transformation.new(line_xaxis, yaxis,zaxis,line_origo)
                 trans.invert!
                 
-
                 #Transformation (new)
                 translation_vector = line_origo.vector_to(ORIGIN)
                 identity = Geom::Transformation.new()
@@ -78,7 +81,6 @@ class FeatureIntersector
                 projection = Geom::Transformation.new([1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 0, 0.0, 0.0, 0.0, 0.0, 1.0])
                 transformation = Geom::Transformation.new()
                 angle_degrees = angle.radians
-                puts "angle between x-axis and xline: #{angle_degrees}"
                 trans = projection*rotation*translation
 
 
@@ -99,6 +101,7 @@ class FeatureIntersector
                     p = vertex.position.clone.transform(trans)
                     p.z = 1.m
                     transformed_points_i.push(p)
+                    inner_calc_steps +=1
                 end
 
 
@@ -121,6 +124,7 @@ class FeatureIntersector
                     p = vertex.position.transform(trans)
                     p.z = 1.m
                     transformed_points_j.push(p)
+                    inner_calc_steps +=1
                 end
 
                 @xlines_dists[[j,i]] = distances_j
@@ -138,20 +142,20 @@ class FeatureIntersector
                             temp_hash[[k,l]] = true
                             temp_hash[[l,k]] = true
                             edge_dists.push(first_vertex.position.distance(second_vertex))
-                            
+                            inner_calc_steps +=1
                         end
                     end
                 end
                 min_edge_dist = edge_dists.min
                 @xlines_proximity_between_ft_vertices[[j,i]] = min_edge_dist
                 @xlines_proximity_between_ft_vertices[[i,j]] = min_edge_dist
-
+                ConsoleDeluxe::print_row(["#{i}-#{j}",angle_degrees,inner_calc_steps],spacings)
                 end      
             end
         end
     end
     
-    def balls_to_the_walls()
+    def balls_to_the_walls(wall_edge_group)
 
         # Creates intersection lines and points for walls intersecting with features. 
         # Also discard bogus intersections via comparing the distance between wall edges 
@@ -160,11 +164,11 @@ class FeatureIntersector
         puts "\n==== BALLS TO THE WALLS ===="
         ConsoleDeluxe::print_row(["Fid","BFP-edge","Min dist","Status"])
         @xlines_walls = Hash.new #TODO implement this
-        @xpoints_walls = Array.new(features.length){Set.new}
+        @xpoints_walls = Array.new(@features.length){Set.new}
         for i in 0...@n_features
-            plane = features[i].plane
+            plane = @features[i].plane
             edge_idx = 0
-            for edge in bfp_face.edges
+            for edge in @bfp_face.edges
                 line_1 = [edge.start.position,Geom::Vector3d.new(0,0,1)]
                 line_2 = [edge.end.position,Geom::Vector3d.new(0,0,1)]
                 #model.entities.add_cline(line_1[0],line_1[1])
@@ -173,7 +177,7 @@ class FeatureIntersector
 
                 new_edge = wall_edge_group.entities.add_edges(x1,x2)[0]
                 distances =  Array.new
-                for vertex in features[i].vertices
+                for vertex in @features[i].vertices
                     distances.push(CustomGeomOperations::point_to_edge_distance(vertex.position,new_edge))
                 end
                 min_dist = distances.min
@@ -203,7 +207,6 @@ class FeatureIntersector
                     id = i.to_s + "-" + j.to_s
                     closest_vertex_to_line_dist,min_id_i = @xlines_dists[[i,j]].each_with_index.min
                     vertex_proximity = @xlines_proximity_between_ft_vertices[[i,j]]           
-
                     if closest_vertex_to_line_dist > @LINE_CONSCENT_THRESH || vertex_proximity > @VERTEX_PROXIMITY_THRESH
                         status = "FIMPAD!"
                         @xlines[[i,j]] = nil
@@ -218,10 +221,9 @@ class FeatureIntersector
     end
     
     def calcualte_relevant_xpoints()
-        #Intersection points
-        @xpoints = Array.new(@features.length){Array.new}
-        @xpoints_deluxe = Hash.new
-        #xpoint_id = 0
+        #Calculates
+        # - xpoints
+        # - xpoints_deluxe
         puts "\n==== Find intersection points ===="
         ConsoleDeluxe::print_row(["Fid","Features X","Keyz","Feature dists (m)","Sum","Status"],[5,15,20,30,20,30])
         for i in 0...@n_features
@@ -270,18 +272,25 @@ class FeatureIntersector
     end
     
     def get_feature_xlines(feature_id)
+
     end
     
-    def get_transformed_feature()
-    end
-
     def get_feature_xline_keys(feature_id)
-
+        #Gets the keys of xlines belonging to a feature
         hash_keys_to_get = (0...@n_features).reject{|x| x == feature_id}.to_a.product([feature_id]) #get whole row except self
         hash_keys_to_get = hash_keys_to_get.reject{|pair| @xlines[pair].nil?} # remove pair with non-existing line
         return hash_keys_to_get
     end
     
+    def get_transformed_feature(f1,f2)
+        #gets 2d points of f1 and f2 transformed to their shared xline. Returns f1 first
+        return @xlines_transformed_points[[f1,f2]], @xlines_transformed_points[[f1,f2]]
+    end
+
+    def get_feature_xpoints(f1,f2)
+        key_set = [f1,f2].to_set
+        shared_xpoints = xpoints_deluxe.select {|k,v| key_set.subset?(k)}
+    end
     def get_xpoint_for_feature_pair(key_set)
         shared_xpoints = xpoints_deluxe.select {|k,v| key_set.subset?(k)} #select x-points belonging o f1 and f2
         vpf_x_points = Array.new()
