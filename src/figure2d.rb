@@ -2,28 +2,66 @@ require 'sketchup.rb'
 
 
 class Figure2d
-    @@figures = []
-    @plot_group
+    # CLASS VARIABLES
+    @@model = Sketchup.active_model
+    @@move_down_trans = Geom::Transformation.new([0, 0, -1.m])
+
+    @@graph_line_layer = @@model.layers.add("Plot Graph lines")
+    @@graph_marker_layer = @@model.layers.add("Plot Graph markers")
+    @@polygon_layer = @@model.layers.add("Plot Polygons")
+
+    
+    
     def initialize(group)
         @plot_group = group
-    end
+            # INSTANCE VARIABLES
+        @tracked_faces = Array.new
+        # @graph_line_group = @plot_group.entities.add_group
+        # @graph_line_group.layer = @@graph_line_layer
 
-    def add_polygon()
+        # @graph_marker_group = @plot_group.entities.add_group
+        # @graph_marker_group = @@graph_marker_layer
+
+        # @polygon_group = @plot_group.entities.add_group
+        # @polygon_group.layer = @@polygon_layer   
         
     end
-    def actually_draw_shit()
-        calculate_plot_area()
 
+    def add_tracked_face(tf)
+        @tracked_faces.push(tf)
     end
 
+    def add_graph(xvals,yvals)
+        graph_points = Array.new
 
-    def calculate_plot_area(plot_group)
+        xvals.each_with_index do |x,index|
+            point = Geom::Point3d.new([x,yvals[index],0])
+            graph_points.push(point)
+            @graph_marker_group.entities.add_cpoint(point)
+        end
+        graph_edges = @graph_line_group.entities.add_edges(graph_points)        
+    end
+
+    def hide_plygon_edges()
+        @tracked_faces.each do |tf|
+            tf.face.edges.each {|e| e.visible = false}
+        end
+    end
+
+    def annotate_poloygons()
+        faces = @tracked_faces.collect{|tf| tf.faces}
+        feature_ids = @tracked_faces.collect{|tf| tf.from_feature}
+        ModelAnnotator::print_feature_ids(faces,@plot_group,feature_ids)
+    end
+
+    def claim_plot_area()
         #calculate plot area
-        xmax = plot_group.bounds.max[0]
-        xmin = plot_group.bounds.min[0]
-        ymax = plot_group.bounds.max[1]
-        ymin = plot_group.bounds.min[1]
-        width = plot_group.bounds.width
+        move_down = Geom::Transformation.new([0, 0, -1.m]) 
+        xmax = @plot_group.bounds.max[0]
+        xmin = @plot_group.bounds.min[0]
+        ymax = @plot_group.bounds.max[1]
+        ymin = @plot_group.bounds.min[1]
+        width = @plot_group.bounds.width
 
         xaxis_end = xmax
         if xmin > 0 then
@@ -38,22 +76,20 @@ class Figure2d
         end
         
         bb_points = [[xmin,ymin,0],[xmax,ymin,0],[xmax,ymax,0],[xmin,ymax,0],[xmin,ymin,0]]
-        #plot_group.entities.add_edges(bb_points)
+        @plot_group.entities.add_edges(bb_points)
 
 
-        move_down = Geom::Transformation.new([0, 0, -1.m])
-        plot_group.entities.transform_entities(move_down,face1) #to avoid z=0 quirk
-        plot_group.entities.transform_entities(move_down,face2)
+        @faces.each do |face| #to avoid z=0 quirk
+            @plot_group.entities.transform_entities(move_down,face)
+        end
 
-        
         draw_axes(xaxis_end,ymax)
-
-
-        
     end
+
     def draw_axes(xaxis_end,yaxis_end)
-        ModelAnnotator::draw_2d_arrow(Geom::Point3d.new([0,0,0]),Geom::Point3d.new([0,yaxis_end,0]),plot_group) #y-axis
-        ModelAnnotator::draw_2d_arrow(Geom::Point3d.new([0,0,0]),Geom::Point3d.new([xaxis_end,0,0]),plot_group) #y-axis
+        @axis_group = @plot_group.entities.add_group
+        ModelAnnotator::draw_2d_arrow(Geom::Point3d.new([0,0,0]),Geom::Point3d.new([0,yaxis_end,0]),@axis_group) #y-axis
+        ModelAnnotator::draw_2d_arrow(Geom::Point3d.new([0,0,0]),Geom::Point3d.new([xaxis_end,0,0]),@axis_group) #y-axis
     end
 
 end

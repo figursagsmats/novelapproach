@@ -5,11 +5,13 @@ require 'sketchup.rb'
 #SKETCHUP_CONSOLE.clear
 puts "LOADED MAIN FYFAN"
 
+require 'pp'
 
 require_relative 'src/importer.rb'
 require_relative 'src/model_annotator.rb'
 require_relative 'src/console_deluxe.rb'
 require_relative 'src/helper_classes.rb'
+require_relative 'src/tracked_face.rb'
 require_relative 'src/figure2d.rb'
 class FalseClass; def to_i; 0 end end
 class TrueClass; def to_i; 1 end end
@@ -27,6 +29,7 @@ module ACG
       layer.visible = visible
       group.layer = layer
       return group
+      
     end
     LINE_CONSCENT_THRESH ||= 4.m
     VERTEX_PROXIMITY_THRESH ||= 2.m
@@ -138,11 +141,13 @@ module ACG
           
           plot_group = model.active_entities.add_group
 
-          #fig = Figure2d.new(plot_group) #NEW
+          fig = Figure2d.new(plot_group) #NEW
           
 
           face_points_1, face_points_2 = fint.get_transformed_feature(f1,f2)
-          
+
+          tf1 = TrackedFace.new(face_points_1,plot_group,f1)
+          tf2 = TrackedFace.new(face_points_2,plot_group,f2)
 
           #fig.add_polygon(face_points_1,face_points_2) #NEW
 
@@ -150,106 +155,130 @@ module ACG
           puts "f2: #{f2}"
           #PLOT
           #Draw faces
-          face1 = plot_group.entities.add_face(face_points_1)
-          face2 = plot_group.entities.add_face(face_points_2)
+          # face1 = plot_group.entities.add_face(face_points_1)
+          # face2 = plot_group.entities.add_face(face_points_2)
 
+
+          fig.add_tracked_face(tf1)
+          fig.add_tracked_face(tf2)
           #calculate plot area
-          xmax = plot_group.bounds.max[0]
-          xmin = plot_group.bounds.min[0]
-          ymax = plot_group.bounds.max[1]
-          ymin = plot_group.bounds.min[1]
-          width = plot_group.bounds.width
+          # xmax = plot_group.bounds.max[0]
+          # xmin = plot_group.bounds.min[0]
+          # ymax = plot_group.bounds.max[1]
+          # ymin = plot_group.bounds.min[1]
+          # width = plot_group.bounds.width
 
-          xaxis_end = xmax
-          if xmin > 0 then
-            width = width + xmin
-            xmin = 0
-          end
+          # xaxis_end = xmax
+          # if xmin > 0 then
+          #   width = width + xmin
+          #   xmin = 0
+          # end
 
-          if xmax < 0 then
-            width = width -xmax
-            xmax = 0
-            xaxis_end = xmin
-          end
+          # if xmax < 0 then
+          #   width = width -xmax
+          #   xmax = 0
+          #   xaxis_end = xmin
+          # end
           
-          bb_points = [[xmin,ymin,0],[xmax,ymin,0],[xmax,ymax,0],[xmin,ymax,0],[xmin,ymin,0]]
-          #plot_group.entities.add_edges(bb_points)
-          move_down = Geom::Transformation.new([0, 0, -1.m]) 
-          plot_group.entities.transform_entities(move_down,face1) #to avoid z=0 quirk
-          plot_group.entities.transform_entities(move_down,face2)
+          # bb_points = [[xmin,ymin,0],[xmax,ymin,0],[xmax,ymax,0],[xmin,ymax,0],[xmin,ymin,0]]
+          # #plot_group.entities.add_edges(bb_points)
+          # 
+          # plot_group.entities.transform_entities(move_down,face1) #to avoid z=0 quirk
+          # plot_group.entities.transform_entities(move_down,face2)
 
-          ModelAnnotator::draw_2d_arrow(Geom::Point3d.new([0,0,0]),Geom::Point3d.new([0,ymax,0]),plot_group) #y-axis
-          ModelAnnotator::draw_2d_arrow(Geom::Point3d.new([0,0,0]),Geom::Point3d.new([xaxis_end,0,0]),plot_group) #y-axis
+          # ModelAnnotator::draw_2d_arrow(Geom::Point3d.new([0,0,0]),Geom::Point3d.new([0,ymax,0]),plot_group) #y-axis
+          # ModelAnnotator::draw_2d_arrow(Geom::Point3d.new([0,0,0]),Geom::Point3d.new([xaxis_end,0,0]),plot_group) #y-axis
 
+          fig.claim_plot_area()
 
           #Get xpoints for feature pair
-          key_set = [f1,f2].to_set
-          shared_xpoints = fint.xpoints_deluxe.select {|k,v| key_set.subset?(k)} #select x-points belonging o f1 and f2
-         
-          vpf_x_points = Array.new() 
-          shared_xpoints.each_pair do |key,point|
-            new_x_point = point.clone
-            new_x_point.z = 0
-            new_x_point.transform!(xlines_transformations[[f1,f2]])
-            vpf_x_points.push([key.to_a.join.to_i,new_x_point,-1])
-            ModelAnnotator::print_xpoint(key,new_x_point,plot_group)
+      
+          shared_xpoints = fint.get_featurepair_xpoints(f1,f2)
+
+          # vpf_x_points = Array.new() 
+          # shared_xpoints.each_pair do |key,point|
+          #   puts "key #{key}" 
+          #   puts "merged key #{key.to_a.join.to_i}" 
+          #   new_x_point = point.clone
+          #   new_x_point.z = 0
+          #   new_x_point.transform!(xlines_transformations[[f1,f2]])
+          #   vpf_x_points.push([key.to_a.join.to_i,new_x_point,-1])
+          #   ModelAnnotator::print_xpoint(key,new_x_point,plot_group)
+          # end
+
+          vpf_x_points = fint.get_featurepair_xpoints_xlips(f1,f2)
+          
+          vpf_x_points.each do |xlip|
+            ModelAnnotator::print_xpoint(xlip.key, xlip.point, plot_group)
           end
           
-          #ConsoleDeluxe::print_row([i,feature_id_pair,shared_xpoints.keys.collect{|x| x.to_a}],[5,20,50])
           where_are_they = Hash.new
           #Get correct pars of the two feature polygons
-          if face1.bounds.center.y > face2.bounds.center.y then #Intersection line is aligned with x-axis, therefore boundingbox can be used
+          if tf1.face.bounds.center.y > tf2.face.bounds.center.y then #Intersection line is aligned with x-axis, therefore boundingbox can be used
             #face1 is north
-            puts "feature #{f1} is north"
-            new_face_feature_id_1 = f1
-            new_face_feature_id_2 = f2
-            new_face_points_1, new_face_points_ids_1 = CustomGeomOperations::get_part_of_polygon(face_points_1,"south")
-            new_face_points_2, new_face_points_ids_2 = CustomGeomOperations::get_part_of_polygon(face_points_2,"north")
+            puts "feature #{tf1.from_feature} is north"
+            tf1.split_in_half("south")
+            tf2.split_in_half("north")
+
 
             where_are_they = {"f1" => "north", "f2" => "south"}
           else
             #face2 is north
-            puts "feature #{f2} is north"
-            new_face_feature_id_1 = f2
-            new_face_feature_id_2 = f1
-            new_face_points_2, new_face_points_ids_2 = CustomGeomOperations::get_part_of_polygon(face_points_1,"north")
-            new_face_points_1, new_face_points_ids_1 = CustomGeomOperations::get_part_of_polygon(face_points_2,"south")
-
+            puts "feature #{tf2.from_feature} is north"
+            tf1.split_in_half("north")
+            tf2.split_in_half("south") #remenber: maybe tf1 should now be tf2???
             where_are_they = {"f1" => "south", "f2" => "north"}
           end
 
+          tracked_face_1 = tf2
+          tracked_face_2 = tf1
+          
+          #ConsoleDeluxe::print_row([i,feature_id_pair,shared_xpoints.keys.collect{|x| x.to_a}],[5,20,50])
+          # where_are_they = Hash.new
+          # #Get correct pars of the two feature polygons
+          # if face1.bounds.center.y > face2.bounds.center.y then #Intersection line is aligned with x-axis, therefore boundingbox can be used
+          #   #face1 is north
+          
 
+          #   new_face_feature_id_1 = f1
+          #   new_face_feature_id_2 = f2
+          #   new_face_points_1, new_face_points_ids_1 = CustomGeomOperations::get_part_of_polygon(face_points_1,"south")
+          #   new_face_points_2, new_face_points_ids_2 = CustomGeomOperations::get_part_of_polygon(face_points_2,"north")
+
+          #   where_are_they = {"f1" => "north", "f2" => "south"}
+          # else
+          #   #face2 is north
+          #   puts "feature #{f2} is north"
+          #   new_face_feature_id_1 = f2
+          #   new_face_feature_id_2 = f1
+          #   new_face_points_2, new_face_points_ids_2 = CustomGeomOperations::get_part_of_polygon(face_points_1,"north")
+          #   new_face_points_1, new_face_points_ids_1 = CustomGeomOperations::get_part_of_polygon(face_points_2,"south")
+
+          #   where_are_they = {"f1" => "south", "f2" => "north"}
+          # end
+
+          
           #PRepare attraction graph
-          x1 = new_face_points_1.collect{|point| point.x}
-          y1 = new_face_points_1.collect{|point| point.y}
-          
-          x2 = new_face_points_2.collect{|point| point.x}
-          y2 = new_face_points_2.collect{|point| point.y}
-          
-          x_padding = 100.m
-          y_padding_north = 200.m
-          y_padding_south = -200.m
 
-          x1_padded = [x1.first - x_padding, x1, x1.last + x_padding].flatten
-          y1_padded = [y1.first + y_padding_north, y1, y1.last + y_padding_north].flatten
-
-          x2_padded = [x2.first - x_padding, x2, x2.last + x_padding].flatten
-          y2_padded = [y2.first + y_padding_south, y2, y2.last + y_padding_south].flatten
-
-          interp_1 = Interpolate::Points.new(Hash[x1_padded.zip(y1_padded)]) #TODO change value outside interval
-          interp_2 = Interpolate::Points.new(Hash[x2_padded.zip(y2_padded)])
-          interps = [nil,interp_1,interp_2]
+          interp1,interp2 = create_interpolator_objects(tf1,tf2)
 
           #collect all step data to attraction table (vpf = vertex-point-feature)
           
-          vpf1 = new_face_points_ids_1.zip(new_face_points_1,Array.new(new_face_points_ids_1.length){new_face_feature_id_1})
-          vpf2 = new_face_points_ids_2.zip(new_face_points_2,Array.new(new_face_points_ids_2.length){new_face_feature_id_2})
-           
+          # vpf1 = new_face_points_ids_1.zip(new_face_points_1,Array.new(new_face_points_ids_1.length){new_face_feature_id_1})
+          # vpf2 = new_face_points_ids_2.zip(new_face_points_2,Array.new(new_face_points_ids_2.length){new_face_feature_id_2})
+          
+          vpf1 = tracked_face_1.get_as_xline_interest_points()
+          vpf2 = tracked_face_2.get_as_xline_interest_points()
+
+          # puts "vpf1: #{vpf1}"
 
           vpf = vpf1 + vpf2 + vpf_x_points
 
-          vpf.sort!{|point_and_id_1,point_and_id_2| point_and_id_1[1].x <=> point_and_id_2[1].x }
-          vpf.collect!{|a| {"vertex"=>a[0],"point"=>a[1],"feature"=>a[2]}} #Just for notation purposes...
+          # vpf.sort!{|point_and_id_1,point_and_id_2| point_and_id_1[1].x <=> point_and_id_2[1].x }
+          vpf.sort!{|xlip_1,xlip_2| xlip_1.x <=> xlip_2.x }
+
+          # vpf.collect!{|a| {"vertex"=>a[0],"point"=>a[1],"feature"=>a[2]} } #Just for notation purposes...
+
           print_temp = shared_xpoints.keys.collect{|x| x.to_a.join.to_i}
 
 
@@ -270,13 +299,13 @@ module ACG
           first_xpoint_hit = false
           index = 0
 
-          xpoints_snaps = vpf_x_points.collect{|xpoint| XPointSnap.new(xpoint[0],xpoint[1])}
+          xpoints_snaps = vpf_x_points.collect{|xpoint| XPointSnap.new(xpoint.key,xpoint.point)}
           vpf.each do |triplet|
             
             #Get the data from triplet
-            fid = triplet["feature"]
-            vertex = triplet["vertex"]
-            x_val = triplet["point"].x
+            fid = triplet.feature_id
+            vertex = triplet.key
+            x_val = triplet.x
 
             #Interpolate the y-vals for current x independent of who the x belongs to
             y_val_1 = interp_1.at(x_val) #TODO avoid interpolating existing value
@@ -291,15 +320,12 @@ module ACG
             #ADD EXTRA STEP
             if !first_step && has_attraction_status_changed_since_prev_step then 
 
-              
-
               prev_attraction = attraction_table[index-1].attraction
               prev_x = attraction_table[index-1].x_val
               
               # new_x = prev_x+factor*x_diff #x at the break point
               new_x = CustomGeomOperations::linear_interp_x(prev_x,x_val,prev_attraction,current_attraction,ATTRACTION_THRESH)
               is_zone_start = prev_attraction_status == false
-
               xpoints_snaps.each do |xpoint_snap|
                 dist = (xpoint_snap.xpoint.x - new_x).abs
                 if(dist < 3.m) then
@@ -309,7 +335,6 @@ module ACG
               end
               if is_zone_start then
                 is_zone = true
-                
                 zones.push(Zone::new(zones.length,index, -1))
                 current_zone = zones.last
                 new_step_type = StepTypes::ZONE_START
@@ -351,7 +376,11 @@ module ACG
           end
 
           if selected.size != selected.uniq.size
-            puts "AJAJAJAJAJAJAJAJA kandidatkonflikt!!"
+            if selected.size == 0
+              puts "NO SELECTED CANDIDATES"
+            else
+              puts "AJAJAJAJAJAJAJAJA kandidatkonflikt!!"
+            end
           else
             #TODO: remove x-point from global list if no candidates found
 
@@ -425,10 +454,10 @@ module ACG
               if insert_point.nil?
                 puts "AJAJAJA"
               end
-              CustomGeomOperations::replace_vertices_on_face_2(face1, points_to_insert_in_f1, insert_point, temp_group)
+              CustomGeomOperations::replace_vertices_on_face_2(tf1.face, points_to_insert_in_f1, insert_point, temp_group)
             end
             else
-              CustomGeomOperations::replace_vertices_on_face(face1, f1_rejectees, points_to_insert_in_f1, temp_group)  
+              CustomGeomOperations::replace_vertices_on_face(tf1.face, f1_rejectees, points_to_insert_in_f1, temp_group)  
             end
 
             if (f2_rejectees.empty?) then
@@ -446,10 +475,10 @@ module ACG
               if insert_point.nil?
                 puts "AJAJAJA"
               end
-              CustomGeomOperations::replace_vertices_on_face_2(face2, points_to_insert_in_f2, insert_point, temp_group)
+              CustomGeomOperations::replace_vertices_on_face_2(tf2.face, points_to_insert_in_f2, insert_point, temp_group)
             end
             else
-              CustomGeomOperations::replace_vertices_on_face(face2, f2_rejectees, points_to_insert_in_f2, temp_group)
+              CustomGeomOperations::replace_vertices_on_face(tf2.face, f2_rejectees, points_to_insert_in_f2, temp_group)
             end
 
           end
@@ -466,10 +495,15 @@ module ACG
           
 
           #Plot attraction      
-          attraction_edges = plot_group.entities.add_edges(attraction)
+          # attraction_edges = plot_group.entities.add_edges(attraction)
 
-          face1.edges.each {|e| e.visible = false}
-          face2.edges.each {|e| e.visible = false}
+          # face1.edges.each {|e| e.visible = false}
+          # face2.edges.each {|e| e.visible = false}
+
+
+          fig.hide_plygon_edges()
+          fig.plot_graph()
+          
           ModelAnnotator::print_feature_ids([face1,face2],plot_group,[f1,f2])
           ModelAnnotator::print_feature_vertex_ids(face1,plot_group)
           ModelAnnotator::print_feature_vertex_ids(face2,plot_group)
@@ -477,7 +511,7 @@ module ACG
           #ModelAnnotator::print_cpoint_with_label("start 1",new_face_points_1[0],plot_group)
           #ModelAnnotator::print_cpoint_with_label("start 2",new_face_points_2[0],plot_group)
 
-          face3 = plot_group.entities.add_face(new_face_points_1)
+          face3 = plot_group.entities.add_face(tracked_face_1.get_new_points())
           face3.edges.each {|e| e.visible = false}
           # face3.reverse!
           face3.material = Sketchup::Color.new(255, 0, 0)
@@ -487,7 +521,7 @@ module ACG
           
           
           
-          face4 = plot_group.entities.add_face(new_face_points_2)
+          face4 = plot_group.entities.add_face(tracked_face_2.get_new_points())
           face4.edges.each {|e| e.visible = false}
           #face4.reverse!
           face4.material = Sketchup::Color.new(0, 0, 255)
@@ -526,9 +560,9 @@ module ACG
       ConsoleDeluxe::print_row(["Fid","Point Id","Vertex idx (sorted)","Distances(sorted)","Type"],[5,10,30,30,20])
       for i in 0..0
         
-        all_xpoints_current_feature = xpoints[i] + xpoints_walls[i].to_a
+        all_xpoints_current_feature = fint.xpoints[i] + fint.xpoints_walls[i].to_a
         
-        all_xpoints_current_feature = xpoints_deluxe.select {|k,v| [i].to_set.subset?(k)}
+        all_xpoints_current_feature = fint.xpoints_deluxe.select {|k,v| [i].to_set.subset?(k)}
         all_xpoints_current_feature.each_pair do |key,point|
 
           ModelAnnotator::print_xpoint(key,point,temp_group)
@@ -549,7 +583,7 @@ module ACG
         #assing vertices to points
         for j in 1..feature_xpoint_vertex_distances.length-1
           ix_type = "normal"
-          if j > xpoints[i].length then
+          if j > fint.xpoints[i].length then
             ix_type = "wall"
           end
           
@@ -572,7 +606,7 @@ module ACG
         feature_face = features[feature_id]
         hash_keys_to_get = (0..iterations).reject{|x| x == feature_id}.to_a.product([feature_id]) #get whole row except self
         puts "keys: #{hash_keys_to_get}"
-        feature_intersections_lines = hash_keys_to_get.collect { |index| xlines[index] }.reject{|x| x.nil?}
+        feature_intersections_lines = hash_keys_to_get.collect { |index| fint.xlines[index] }.reject{|x| x.nil?}
 
 
         feature_intersections_lines.each {|line| model.entities.add_cline(line[0],line[1])}
@@ -599,7 +633,28 @@ module ACG
       model.commit_operation
     end
 
+    def self.create_interpolator_objects(tf1,tf2)
+      x1 = tf1.get_new_points().collect{|point| point.x}
+      y1 = tf2.get_new_points().collect{|point| point.y}
+      
+      x2 = tracked_face_2.get_new_points().collect{|point| point.x}
+      y2 = tracked_face_2.get_new_points().collect{|point| point.y}
+      
+      x_padding = 100.m
+      y_padding_north = 200.m
+      y_padding_south = -200.m  
 
+      x1_padded = [x1.first - x_padding, x1, x1.last + x_padding].flatten
+      y1_padded = [y1.first + y_padding_north, y1, y1.last + y_padding_north].flatten
+
+      x2_padded = [x2.first - x_padding, x2, x2.last + x_padding].flatten
+      y2_padded = [y2.first + y_padding_south, y2, y2.last + y_padding_south].flatten
+
+      interp_1 = Interpolate::Points.new(Hash[x1_padded.zip(y1_padded)]) #TODO change value outside interval
+      interp_2 = Interpolate::Points.new(Hash[x2_padded.zip(y2_padded)])
+      
+      return interp1,interp2
+    end
 
     # Here we add a menu item for the extension. Note that we again use a
     # load guard to prevent multiple menu items from accidentally being

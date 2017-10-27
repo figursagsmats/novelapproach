@@ -63,6 +63,40 @@ module CustomGeomOperations
         return new_points,ids_to_save 
     end
     
+    def self.get_adjecent_halfs_of_polygons(face_points_1,face_points_2,f1,f2)
+        #ConsoleDeluxe::print_row([i,feature_id_pair,shared_xpoints.keys.collect{|x| x.to_a}],[5,20,50])
+
+        #Make some temporary faces in order to get boundingbox center in fast manner.
+        temp_group = Sketchup.active_model.active_entities.add_group
+        face1 = temp_group.entities.add_face(face_points_1)
+        face2 = temp_group.entities.add_face(face_points_2)
+
+        where_are_they = Hash.new
+        #Get correct pars of the two polygons
+        if face1.bounds.center.y > face2.bounds.center.y then #Intersection line is aligned with x-axis, therefore boundingbox can be used
+            #face1 is north
+            puts "feature #{f1} is north"
+            new_face_feature_id_1 = f1
+            new_face_feature_id_2 = f2
+            new_face_points_1, new_face_points_ids_1 = CustomGeomOperations::get_part_of_polygon(face_points_1,"south")
+            new_face_points_2, new_face_points_ids_2 = CustomGeomOperations::get_part_of_polygon(face_points_2,"north")
+
+            where_are_they = {"f1" => "north", "f2" => "south"}
+        else
+            #face2 is north
+            puts "feature #{f2} is north"
+            new_face_feature_id_1 = f2
+            new_face_feature_id_2 = f1
+            new_face_points_2, new_face_points_ids_2 = CustomGeomOperations::get_part_of_polygon(face_points_1,"north")
+            new_face_points_1, new_face_points_ids_1 = CustomGeomOperations::get_part_of_polygon(face_points_2,"south")
+
+            where_are_they = {"f1" => "south", "f2" => "north"}
+        end 
+        temp_group.erase!
+        return new_face_points_1,new_face_points_2,new_face_points_ids_1,new_face_points_ids_2,where_are_they
+    end
+
+
     def self.replace_vertices_on_face(face,rejectees,new_points,group)
         new_ids = (Set.new((0...face.vertices.length).to_a) - Set.new(rejectees)).to_a
         insert_position = new_ids[rejectees.min-1]

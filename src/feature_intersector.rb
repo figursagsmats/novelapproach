@@ -3,6 +3,7 @@ require_relative '../src/importer.rb'
 require_relative '../src/model_annotator.rb'
 require_relative '../src/console_deluxe.rb'
 require_relative '../src/helper_classes.rb'
+require_relative '../src/xline_interest_point.rb'
 class FeatureIntersector
 
     
@@ -16,7 +17,7 @@ class FeatureIntersector
         @bfp_face = bfp_face
 
         #use hashes instead of 2d arrays
-        @xlines= Hash.new             #intersection lines
+        @xlines= Hash.new             #intersection lines. key is an array of feature ids
         @xlines_dists = Hash.new      #distance from feature vertices to xline.
         @xlines_projs = Hash.new      #vertices projected on xline
         @xlines_ts = Hash.new         #where on the xline
@@ -27,6 +28,8 @@ class FeatureIntersector
         @xpoints = Array.new(@features.length){Array.new} #One array of xpoints per feature
         @xpoints_deluxe = Hash.new #Hash that takes a set of ids as key and and xpoint as value
 
+        @xlines_walls = Hash.new #TODO implement this
+        @xpoints_walls = Array.new(@features.length){Set.new}
 
         @LINE_CONSCENT_THRESH ||= 4.m
         @VERTEX_PROXIMITY_THRESH ||= 2.m
@@ -35,7 +38,11 @@ class FeatureIntersector
         @ATTRACTION_THRESH ||= 2.m
     end
 
-    attr_reader :xpoints_deluxe
+    attr_reader :xpoints_deluxe 
+    attr_reader :xpoints 
+    attr_reader :xpoints_walls
+    attr_reader :xlines
+
     
     def initial_calculations()
 
@@ -163,8 +170,7 @@ class FeatureIntersector
 
         puts "\n==== BALLS TO THE WALLS ===="
         ConsoleDeluxe::print_row(["Fid","BFP-edge","Min dist","Status"])
-        @xlines_walls = Hash.new #TODO implement this
-        @xpoints_walls = Array.new(@features.length){Set.new}
+
         for i in 0...@n_features
             plane = @features[i].plane
             edge_idx = 0
@@ -277,56 +283,37 @@ class FeatureIntersector
     
     def get_feature_xline_keys(feature_id)
         #Gets the keys of xlines belonging to a feature
-        hash_keys_to_get = (0...@n_features).reject{|x| x == feature_id}.to_a.product([feature_id]) #get whole row except self
-        hash_keys_to_get = hash_keys_to_get.reject{|pair| @xlines[pair].nil?} # remove pair with non-existing line
-        return hash_keys_to_get
+        xline_key_array = (0...@n_features).reject{|x| x == feature_id}.to_a.product([feature_id]) #get whole row except self
+        xline_key_array = xline_key_array.reject{|pair| @xlines[pair].nil?} # remove pair with non-existing line
+        return xline_key_array
     end
     
     def get_transformed_feature(f1,f2)
         #gets 2d points of f1 and f2 transformed to their shared xline. Returns f1 first
-        return @xlines_transformed_points[[f1,f2]], @xlines_transformed_points[[f1,f2]]
+        return @xlines_transformed_points[[f1,f2]], @xlines_transformed_points[[f2,f1]]
     end
 
-    def get_feature_xpoints(f1,f2)
+    def get_featurepair_xpoints(f1,f2)
         key_set = [f1,f2].to_set
-        shared_xpoints = xpoints_deluxe.select {|k,v| key_set.subset?(k)}
-    end
-    def get_xpoint_for_feature_pair(key_set)
-        shared_xpoints = xpoints_deluxe.select {|k,v| key_set.subset?(k)} #select x-points belonging o f1 and f2
-        vpf_x_points = Array.new()
-        shared_xpoints.each_pair do |key,point|
-            new_x_point = point.clone
-            new_x_point.z = 0
-            new_x_point.transform!(xlines_transformations[[f1,f2]])
-            vpf_x_points.push([key.to_a.join.to_i,new_x_point,-1])
-            ModelAnnotator::print_xpoint(key,new_x_point,plot_group)
-        end
-        return vpf_x_points
+        shared_xpoints = @xpoints_deluxe.select {|k,v| key_set.subset?(k)}
     end
 
-    def features_position_from_line(face1, face2)
-        where_are_they = Hash.new
-          #Get correct pars of the two feature polygons
-          if face1.bounds.center.y > face2.bounds.center.y then #Intersection line is aligned with x-axis, therefore boundingbox can be used
-            #face1 is north
-            puts "feature #{f1} is north"
-            new_face_feature_id_1 = f1
-            new_face_feature_id_2 = f2
-            new_face_points_1, new_face_points_ids_1 = CustomGeomOperations::get_part_of_polygon(face_points_1,"south")
-            new_face_points_2, new_face_points_ids_2 = CustomGeomOperations::get_part_of_polygon(face_points_2,"north")
-
-            where_are_they = {"f1" => "north", "f2" => "south"}
-          else
-            #face2 is north
-            puts "feature #{f2} is north"
-            new_face_feature_id_1 = f2
-            new_face_feature_id_2 = f1
-            new_face_points_2, new_face_points_ids_2 = CustomGeomOperations::get_part_of_polygon(face_points_1,"north")
-            new_face_points_1, new_face_points_ids_1 = CustomGeomOperations::get_part_of_polygon(face_points_2,"south")
-
-            where_are_they = {"f1" => "south", "f2" => "north"}
-          end
+    def get_featurepair_xpoints_xlips(f1,f2)
+        shared_xpoints = get_featurepair_xpoints(f1,f2)
+        xline_interest_points = Array.new() 
+        shared_xpoints.each_pair do |xpoint_keyset,xpoint|
+          transformed_xpoint = transform_xpoint(xpoint,f1,f2)
+          xline_interest_points.push(XlineInterestPoint.new(xpoint_keyset, transformed_xpoint,- 1))
         end
+        return xline_interest_points
+    end
+
+    def transform_xpoint(xpoint,f1,f2)
+        new_x_point = xpoint.clone
+        new_x_point.z = 0
+        new_x_point.transform!(@xlines_transformations[[f1,f2]])
+        return new_x_point
+    end
 
 
 

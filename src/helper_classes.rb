@@ -55,11 +55,11 @@ class Step
 end
 
 module StepTypes
-  VERTEX = "v"
-  XPOINT = "X-point"
-  ZONE = "Zone"
-  ZONE_START ="Zone start"
-  ZONE_END ="Zone end"
+  VERTEX ||= "v"
+  XPOINT ||= "X-point"
+  ZONE ||= "Zone"
+  ZONE_START ||="Zone start"
+  ZONE_END ||="Zone end"
 end
 
 
@@ -110,21 +110,36 @@ class XPointSnap
     @xpoint = point
     @candidates = SortedSet.new()
     
-    end
+  end
 
-    def add_candidate(id,dist)
-      @candidates.add(IdValuePair.new(id,dist))
-    end
+  def add_candidate(id,dist)
+    @candidates.add(IdValuePair.new(id,dist))
+  end
 
+
+
+  
   def get_best_candidate()
-
     unless @candidates.empty?
       @candidates.to_a.first.id
     else
       nil
     end
-    
   end
+
+  def pretty()
+    return "XPointSnap: (#{@xpoint_key} | #{@xpoint.inspect})"
+  end
+
+  def inspect
+    return self.pretty()
+
+  end
+
+  def to_s
+    return self.pretty()
+  end
+
   def get_all_candidate_ids()
     @candidates.to_a.collect{|idvalpair| idvalpair.id}
   end
@@ -134,6 +149,21 @@ class XPointSnap
 
 end
 
+class Temp
+  attr_accessor :id
+  def initialize(id)
+    @id = id
+    @tjena
+  end
+
+  def to_s()
+    return "TOSTRING"
+  end
+
+  def inspect()
+    return "INSPECT"
+  end
+end
 
 
 class IdValuePair

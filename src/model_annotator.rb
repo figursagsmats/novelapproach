@@ -23,7 +23,11 @@ module ModelAnnotator
   end
 
   def self.print_xpoint(key,point,group)
-    txt = "P " + key.to_a.to_s
+    unless key.is_a?(Fixnum) then
+      txt = "P " + key.to_a.to_s
+    else
+      txt = "P " + key.to_s 
+    end
     group.entities.add_text(txt,point.offset([0,0,0.m]),[0,0,1.m])
     group.entities.add_cpoint(point)
   end
