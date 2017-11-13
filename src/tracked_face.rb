@@ -10,13 +10,16 @@ class TrackedFace
   attr_reader :original_face_points
 
   def initialize(face_points,group,from_feature)
+    move_down = Geom::Transformation.new([0, 0, -1.m]) 
+    
     @original_face_points = face_points
     @from_feature = from_feature
     @face = group.entities.add_face(face_points)
+    group.entities.transform_entities(move_down,@face)
     @face.visible = false
     
     @ids_to_save = Array(0..@face.vertices.length) #ids of points used in the potential new face
-    ObjectSpace.define_finalizer(self, proc { @face.erase! }) #destructor
+    # ObjectSpace.define_finalizer(self, proc { @face.erase! }) #destructor
 
   end
 

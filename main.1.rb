@@ -35,7 +35,7 @@ module ACG
     # This method creates a simple cube inside of a group in the model.
     def self.import_strykiron
       SKETCHUP_CONSOLE.clear
-      puts "KOMMIGEN NU PRITT-MARIE! KÖR FÖFA-AN!!!!!"
+      puts "<<<<<< OLD MAIN >>>>>>"
       #$stdout.sync = true
       model = Sketchup.active_model
       model.start_operation('Import StrykIron', true)
@@ -371,6 +371,12 @@ module ACG
           puts "f2: #{f2}"
           #PLOT
           #Draw faces
+          puts "face_points_1:"
+          pp(face_points_1)
+          puts "=====================\n"
+          puts "face_points_2:"
+          pp(face_points_2)
+          puts "=====================\n"
           face1 = plot_group.entities.add_face(face_points_1)
           face2 = plot_group.entities.add_face(face_points_2)
           #calculate plot area

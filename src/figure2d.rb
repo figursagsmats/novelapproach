@@ -10,12 +10,16 @@ class Figure2d
     @@graph_marker_layer = @@model.layers.add("Plot Graph markers")
     @@polygon_layer = @@model.layers.add("Plot Polygons")
 
+    attr_reader :x_min
     
     
     def initialize(group)
         @plot_group = group
+        @plot_group.name = "figure"
             # INSTANCE VARIABLES
         @tracked_faces = Array.new
+        @faces = Array.new
+        @face_ids = Array.new
         # @graph_line_group = @plot_group.entities.add_group
         # @graph_line_group.layer = @@graph_line_layer
 
@@ -29,6 +33,12 @@ class Figure2d
 
     def add_tracked_face(tf)
         @tracked_faces.push(tf)
+        add_polygon(tf.original_face_points,tf.from_feature)
+    end
+
+    def add_polygon(face_points,id)
+        @faces.push(@plot_group.entities.add_face(face_points))
+        @face_ids.push(id)
     end
 
     def add_graph(xvals,yvals)
@@ -37,21 +47,24 @@ class Figure2d
         xvals.each_with_index do |x,index|
             point = Geom::Point3d.new([x,yvals[index],0])
             graph_points.push(point)
-            @graph_marker_group.entities.add_cpoint(point)
+            @plot_group.entities.add_cpoint(point)
         end
-        graph_edges = @graph_line_group.entities.add_edges(graph_points)        
+        graph_edges = @plot_group.entities.add_edges(graph_points)        
     end
 
     def hide_plygon_edges()
-        @tracked_faces.each do |tf|
-            tf.face.edges.each {|e| e.visible = false}
+        @faces.each do |face|
+            face.edges.each {|e| e.visible = false}
         end
     end
 
     def annotate_poloygons()
-        faces = @tracked_faces.collect{|tf| tf.faces}
-        feature_ids = @tracked_faces.collect{|tf| tf.from_feature}
-        ModelAnnotator::print_feature_ids(faces,@plot_group,feature_ids)
+        # faces = @tracked_faces.collect{|tf| tf.faces}
+        # feature_ids = @tracked_faces.collect{|tf| tf.from_feature}
+        ModelAnnotator::print_feature_ids(@faces,@plot_group,@face_ids)
+        @faces.each do |face|
+            ModelAnnotator::print_feature_vertex_ids(face,@plot_group)
+        end
     end
 
     def claim_plot_area()
@@ -84,6 +97,7 @@ class Figure2d
         end
 
         draw_axes(xaxis_end,ymax)
+        @x_min = xmin
     end
 
     def draw_axes(xaxis_end,yaxis_end)

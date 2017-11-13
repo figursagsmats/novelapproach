@@ -1,4 +1,5 @@
 require 'sketchup.rb'
+require 'pp'
 
 module CustomGeomOperations
 
@@ -98,9 +99,19 @@ module CustomGeomOperations
 
 
     def self.replace_vertices_on_face(face,rejectees,new_points,group)
+        face_points_before = face.vertices.collect{|v| v.position}
+        puts "face_points_before:"
+        pp(face_points_before)
+        puts "=====================================\n"
+        puts "new_points"
+        pp(new_points)
+        puts "=====================================\n"
         new_ids = (Set.new((0...face.vertices.length).to_a) - Set.new(rejectees)).to_a
         insert_position = new_ids[rejectees.min-1]
         new_face_points = replace_vertices_on_face_core(face,new_ids,new_points, insert_position)
+        puts "new_face_points:"
+        pp(new_face_points)
+        puts "====================================="
         return group.entities.add_face(new_face_points)
     end
     

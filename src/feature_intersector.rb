@@ -290,6 +290,10 @@ class FeatureIntersector
     
     def get_transformed_feature(f1,f2)
         #gets 2d points of f1 and f2 transformed to their shared xline. Returns f1 first
+
+        face_points_1 = @xlines_transformed_points[[f1,f2]]
+        face_points_2 = @xlines_transformed_points[[f2,f1]]
+        
         return @xlines_transformed_points[[f1,f2]], @xlines_transformed_points[[f2,f1]]
     end
 

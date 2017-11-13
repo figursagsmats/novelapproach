@@ -24,6 +24,7 @@ module ACG
       model = Sketchup.active_model
       layers = model.layers
       group = model.active_entities.add_group
+      group.name = name
       # group.name = name
       layer = layers.add(name)
       layer.visible = visible
@@ -39,7 +40,8 @@ module ACG
     # This method creates a simple cube inside of a group in the model.
     def self.import_strykiron
       SKETCHUP_CONSOLE.clear
-      puts "KOMMIGEN NU PRITT-MARIE! KÖR FÖFA-AN!!!!!"
+      puts "<<<<<< NEW MAIN >>>>>>"
+      
       #$stdout.sync = true
       model = Sketchup.active_model
       model.start_operation('Import StrykIron', true)
@@ -56,6 +58,7 @@ module ACG
       xpoints_group = add_group_and_layer("Intersection Points",true)
       xpoints_labels_group = add_group_and_layer("Intersection Point Labels",true)
       feature_vertex_ids_group =add_group_and_layer("Feature vertices",false)
+
 
 
       bfp_face = Importer::read_bfp_points(bfp_group)
@@ -140,11 +143,24 @@ module ACG
 
           
           plot_group = model.active_entities.add_group
-
-          fig = Figure2d.new(plot_group) #NEW
+          fig_group = model.active_entities.add_group
+          plot_group.name = "plotgroup"
+          fig = Figure2d.new(fig_group) #NEW
+          
+          
           
 
           face_points_1, face_points_2 = fint.get_transformed_feature(f1,f2)
+          
+          puts "face_points_1:"
+          pp(face_points_1)
+          puts "=====================\n"
+          puts "face_points_2:"
+          pp(face_points_2)
+          puts "=====================\n"
+
+          # face1 = plot_group.entities.add_face(face_points_1)
+          # face2 = plot_group.entities.add_face(face_points_2)
 
           tf1 = TrackedFace.new(face_points_1,plot_group,f1)
           tf2 = TrackedFace.new(face_points_2,plot_group,f2)
@@ -159,8 +175,7 @@ module ACG
           # face2 = plot_group.entities.add_face(face_points_2)
 
 
-          fig.add_tracked_face(tf1)
-          fig.add_tracked_face(tf2)
+
           #calculate plot area
           # xmax = plot_group.bounds.max[0]
           # xmin = plot_group.bounds.min[0]
@@ -189,7 +204,7 @@ module ACG
           # ModelAnnotator::draw_2d_arrow(Geom::Point3d.new([0,0,0]),Geom::Point3d.new([0,ymax,0]),plot_group) #y-axis
           # ModelAnnotator::draw_2d_arrow(Geom::Point3d.new([0,0,0]),Geom::Point3d.new([xaxis_end,0,0]),plot_group) #y-axis
 
-          fig.claim_plot_area()
+          
 
           #Get xpoints for feature pair
       
@@ -233,6 +248,10 @@ module ACG
           tracked_face_1 = tf2
           tracked_face_2 = tf1
           
+          fig.add_tracked_face(tracked_face_1)
+          fig.add_tracked_face(tracked_face_2)
+          fig.claim_plot_area()
+
           #ConsoleDeluxe::print_row([i,feature_id_pair,shared_xpoints.keys.collect{|x| x.to_a}],[5,20,50])
           # where_are_they = Hash.new
           # #Get correct pars of the two feature polygons
@@ -260,7 +279,7 @@ module ACG
           
           #PRepare attraction graph
 
-          interp1,interp2 = create_interpolator_objects(tf1,tf2)
+          interp_1,interp_2 = create_interpolator_objects(tracked_face_1,tracked_face_2)
 
           #collect all step data to attraction table (vpf = vertex-point-feature)
           
@@ -438,7 +457,7 @@ module ACG
             end
 
             temp_group = plot_group.entities.add_group
-
+            temp_group.name = "temp_group"
             if (f1_rejectees.empty?) then
               if (f1_rejectees.empty?) then
               insert_point = nil
@@ -454,10 +473,10 @@ module ACG
               if insert_point.nil?
                 puts "AJAJAJA"
               end
-              CustomGeomOperations::replace_vertices_on_face_2(tf1.face, points_to_insert_in_f1, insert_point, temp_group)
+              CustomGeomOperations::replace_vertices_on_face_2(tracked_face_1.face, points_to_insert_in_f1, insert_point, temp_group)
             end
             else
-              CustomGeomOperations::replace_vertices_on_face(tf1.face, f1_rejectees, points_to_insert_in_f1, temp_group)  
+              CustomGeomOperations::replace_vertices_on_face(tracked_face_1.face, f1_rejectees, points_to_insert_in_f1, temp_group)  
             end
 
             if (f2_rejectees.empty?) then
@@ -475,23 +494,31 @@ module ACG
               if insert_point.nil?
                 puts "AJAJAJA"
               end
-              CustomGeomOperations::replace_vertices_on_face_2(tf2.face, points_to_insert_in_f2, insert_point, temp_group)
+              CustomGeomOperations::replace_vertices_on_face_2(tracked_face_2.face, points_to_insert_in_f2, insert_point, temp_group)
             end
             else
-              CustomGeomOperations::replace_vertices_on_face(tf2.face, f2_rejectees, points_to_insert_in_f2, temp_group)
+              CustomGeomOperations::replace_vertices_on_face(tracked_face_2.face, f2_rejectees, points_to_insert_in_f2, temp_group)
             end
 
           end
 
+          x1 = tracked_face_1.get_new_points().collect{|point| point.x}
+          x2 = tracked_face_2.get_new_points().collect{|point| point.x}
           x_all = (x1+x2).sort
-          attraction = Array.new
-          
-          x_all.each do |x|
-            diff = interp_1.at(x)-interp_2.at(x)
-            attraction.push(Geom::Point3d.new([x,diff,0]))
-            plot_group.entities.add_cpoint(Geom::Point3d.new([x,diff,0]))
-          end
 
+          xvals = (x1+x2).sort
+          yvals = x_all.collect{|x| interp_1.at(x)-interp_2.at(x)}
+
+          # attraction = Array.new
+          # yvals = Array.new
+          # x_all.each do |x|
+          #   diff = interp_1.at(x)-interp_2.at(x)
+          #   yvals.push(diff)
+          #   attraction.push(Geom::Point3d.new([x,diff,0]))
+          #   plot_group.entities.add_cpoint(Geom::Point3d.new([x,diff,0]))
+          # end
+
+          fig.add_graph(xvals,yvals)
           
 
           #Plot attraction      
@@ -502,36 +529,37 @@ module ACG
 
 
           fig.hide_plygon_edges()
-          fig.plot_graph()
+          fig.annotate_poloygons();
           
-          ModelAnnotator::print_feature_ids([face1,face2],plot_group,[f1,f2])
-          ModelAnnotator::print_feature_vertex_ids(face1,plot_group)
-          ModelAnnotator::print_feature_vertex_ids(face2,plot_group)
+          # ModelAnnotator::print_feature_ids([face1,face2],plot_group,[f1,f2])
+          # ModelAnnotator::print_feature_vertex_ids(face1,plot_group)
+          # ModelAnnotator::print_feature_vertex_ids(face2,plot_group)
           # plot_group.entities.erase_entities([face1,face2])
+
           #ModelAnnotator::print_cpoint_with_label("start 1",new_face_points_1[0],plot_group)
           #ModelAnnotator::print_cpoint_with_label("start 2",new_face_points_2[0],plot_group)
 
-          face3 = plot_group.entities.add_face(tracked_face_1.get_new_points())
-          face3.edges.each {|e| e.visible = false}
-          # face3.reverse!
-          face3.material = Sketchup::Color.new(255, 0, 0)
-          face3.material.alpha = 0.5
-          #face3.visible = false
-          #ModelAnnotator::print_feature_vertex_ids(face3,plot_group)
+          # face3 = plot_group.entities.add_face(tracked_face_1.get_new_points())
+          # face3.edges.each {|e| e.visible = false}
+          # # face3.reverse!
+          # face3.material = Sketchup::Color.new(255, 0, 0)
+          # face3.material.alpha = 0.5
+          # #face3.visible = false
+          # #ModelAnnotator::print_feature_vertex_ids(face3,plot_group)
           
           
           
-          face4 = plot_group.entities.add_face(tracked_face_2.get_new_points())
-          face4.edges.each {|e| e.visible = false}
-          #face4.reverse!
-          face4.material = Sketchup::Color.new(0, 0, 255)
-          face4.material.alpha = 0.5
-          #face4.visible = false
-          #ModelAnnotator::print_feature_vertex_ids(face4,plot_group)
+          # face4 = plot_group.entities.add_face(tracked_face_2.get_new_points())
+          # face4.edges.each {|e| e.visible = false}
+          # #face4.reverse!
+          # face4.material = Sketchup::Color.new(0, 0, 255)
+          # face4.material.alpha = 0.5
+          # #face4.visible = false
+          # #ModelAnnotator::print_feature_vertex_ids(face4,plot_group)
 
-          move_down = Geom::Transformation.new([0, 0, -0.9.m]) 
-          plot_group.entities.transform_entities(move_down,face3) #to avoid z=0 quirk
-          plot_group.entities.transform_entities(move_down,face4)
+          # move_down = Geom::Transformation.new([0, 0, -0.9.m]) 
+          # plot_group.entities.transform_entities(move_down,face3) #to avoid z=0 quirk
+          # plot_group.entities.transform_entities(move_down,face4)
           
           
           #Plot Legend
@@ -540,6 +568,7 @@ module ACG
           # text = "Feature " +f1.to_s  + "& " +f2.to_s
           # temp_group.entities.add_3d_text(text, TextAlignCenter, "Arial", true, false, 0.5.m, 0.0, 0.5, true, 0)
           # temp_group.transform!(trans)
+          xmin = fig.x_min
           plot_group.transform!([x_offset-xmin,0,0])
           x_offset = x_offset+width+3.m
           count = count +1
@@ -635,10 +664,10 @@ module ACG
 
     def self.create_interpolator_objects(tf1,tf2)
       x1 = tf1.get_new_points().collect{|point| point.x}
-      y1 = tf2.get_new_points().collect{|point| point.y}
+      y1 = tf1.get_new_points().collect{|point| point.y}
       
-      x2 = tracked_face_2.get_new_points().collect{|point| point.x}
-      y2 = tracked_face_2.get_new_points().collect{|point| point.y}
+      x2 = tf2.get_new_points().collect{|point| point.x}
+      y2 = tf2.get_new_points().collect{|point| point.y}
       
       x_padding = 100.m
       y_padding_north = 200.m
@@ -653,7 +682,7 @@ module ACG
       interp_1 = Interpolate::Points.new(Hash[x1_padded.zip(y1_padded)]) #TODO change value outside interval
       interp_2 = Interpolate::Points.new(Hash[x2_padded.zip(y2_padded)])
       
-      return interp1,interp2
+      return interp_1,interp_2
     end
 
     # Here we add a menu item for the extension. Note that we again use a
